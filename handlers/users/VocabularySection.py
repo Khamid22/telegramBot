@@ -2,7 +2,7 @@ from aiogram.types import Message, CallbackQuery
 from keyboards.default.Vocabulary import VocabularySection
 from states.Vocabulary import VocabularyState
 from aiogram.dispatcher import FSMContext
-from keyboards.inline.GuessTheWord import options
+from keyboards.inline.GuessTheWord import options, reveal
 from handlers.users.start import bot_start
 import numpy as np
 import pandas as pd
@@ -26,36 +26,56 @@ async def start_the_game(message: Message, state: FSMContext):
         learnt_words = np.zeros(len(words))
         f = 0
         game_engine = True
+
         while game_engine:
             for word in words:
+                if np.sum(learnt_words) == (len(words) * 2):
+                    await message.answer("this is the end, you want to start all over again?", reply_markup=options)
+                    if message.text == "yes":
+                        await start_the_game()
+                    if message.text == "no":
+                        game_engine = False
                 if learnt_words[f] == 0 or learnt_words[f] == 1:
-                    await message.answer("Score \n Meaning: ", definitions[f])
-                    await message.answer("rate: \n --i did not know-- 😐 \n --now i know, ask me "
-                                         "again-- 😅 \n -- i knew it, dont ask me again -- 😃")
-                    answer = message.text
+                    await message.bot.send_message(message.from_user.id, f'word : {word}', reply_markup=reveal)
+                    async with state.proxy() as data:
+                        data['definitions[f]'] = definitions[f]
+                    await reveal_the_answer()
+                    answer = await receive_message()
                     if answer == "0":
                         learnt_words[f] = 0
                     elif answer == "1":
                         learnt_words[f] = 1
                     elif answer == "2":
                         learnt_words[f] = 2
-                    await message.answer(learnt_words)
                     f += 1
                 else:
                     f += 1
                     continue
-            await message.answer("result", learnt_words)
-            f = 0
-            if np.sum(learnt_words) == (len(words) * 2):
-                await message.answer("this is the end, you want to start all over again?", reply_markup=options)
-                if message.text == "yes":
-                    await start_the_game()
-                if message.text == "no":
-                    game_engine = False
-        else:
-            game_state = False
+                await message.bot.send_message(message.from_user.id, f'Result {learnt_words}')
+                f = 0
 
 
 @dp.message_handler(text="back", state="*")
 async def get_back_main_menu(message: Message, state: FSMContext):
     await bot_start(message, state)
+
+
+@dp.callback_query_handler(text="lookup", state='*')
+async def reveal_the_answer(call: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        word = data['definitions[f]']
+    await call.message.answer(f'Definition: {word}\n'
+                              "rate: \n --i did not know-- 😐 \n --now i know, ask me "
+                              "again-- 😅 \n -- i knew it, dont ak me again -- 😃", reply_markup=options)
+    await call.answer(cache_time=60)
+    await VocabularyState.thirdPage.set()
+
+
+@dp.callback_query_handler(state=VocabularyState.thirdPage)
+async def choose_one_option(call: CallbackQuery, state: FSMContext):
+    await call.answer(cache_time=60)
+    await receive_message(call.data)
+
+
+async def receive_message(data):
+    return data
