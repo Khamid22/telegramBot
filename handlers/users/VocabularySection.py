@@ -23,7 +23,6 @@ async def send_categories(message: Message, state: FSMContext):
 
 @dp.message_handler(text="Guessing Word", state=VocabularyState.secondPage)
 async def start_the_game(message: Message, state: FSMContext):
-    game_state = True
     f = 0
     game_engine = True
     while game_engine:
@@ -39,8 +38,8 @@ async def start_the_game(message: Message, state: FSMContext):
                 async with state.proxy() as data:
                     data['definitions[f]'] = definitions[f]
                     data['f'] = f
-                await reveal_the_answer()
-                await choose_one_option()
+                await VocabularyState.secondPage.set()
+    await message.answer("come back again", reply_markup=VocabularySection)
 
 
 @dp.message_handler(text="back", state="*")
@@ -48,7 +47,7 @@ async def get_back_main_menu(message: Message, state: FSMContext):
     await bot_start(message, state)
 
 
-@dp.callback_query_handler(text="lookup", state='*')
+@dp.callback_query_handler(text="lookup", state=VocabularyState.secondPage)
 async def reveal_the_answer(call: CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
         word = data['definitions[f]']
@@ -75,4 +74,5 @@ async def choose_one_option(call: CallbackQuery, state: FSMContext):
     else:
         f += 1
     await call.bot.send_message(call.from_user.id, f'Result {learnt_words}')
+    await VocabularyState.secondPage.set()
 
